@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 
+_LOGGER: logging.Logger = logging.getLogger(__package__)
+_LOGGER = logging.getLogger(__name__)
+
 # RAW API CODE BELOW
 from bs4 import BeautifulSoup as BS
 from datetime import datetime, timedelta
@@ -45,9 +48,7 @@ class viggo_api:
     loggedIn = False
     fingerPrint = None
     unreadMsg = -1
-    updateMsg = False
     unreadBbs = -1
-    updateBbs = False
     userFullName = None
     userImg = None
     bbs = {}
@@ -61,13 +62,12 @@ class viggo_api:
     def update(self):
         self._login()
 
-        if self.updateMsg:
-            self._fetchFolders()
-            self._fetchMsg()
-            self._fetcgMsgContent()
+        self._fetchFolders()
+        self._fetchMsg()
+        # This accidently "reads" the messages....
+        # self._fetcgMsgContent()
 
-        if self.updateBbs:
-            self._fetchBbs()
+        self._fetchBbs()
 
     def getMsgFolders(self):
         return self.msgBox.folders.values()
@@ -78,11 +78,13 @@ class viggo_api:
     def _login(self, soup=None):
         # Have we been here before - did we bring soup...?
         if soup is None:
+            _LOGGER.debug("Login, first run...")
             soup = self._fetchHtml(self.baseUrl)
         if soup:
             self.loggedIn = (
                 soup.select_one("form[action='/Basic/Account/Login']") is None
             )
+            _LOGGER.debug(f"Logged in: {self.loggedIn}")
             if not self.loggedIn:
                 # Prepare a payload for login
                 payload = {
@@ -126,15 +128,11 @@ class viggo_api:
                 imgTag = soup.select_one("ul[id='nav-user']").img
 
                 # Messages
-                unreadMsg = int(msgTag["data-amount"])
-                self.updateMsg = not self.unreadMsg == unreadMsg
-                self.unreadMsg = unreadMsg
+                self.unreadMsg = int(msgTag["data-amount"])
                 URLS[MSG_FOLDERS] = msgTag["href"]
 
                 # Bulletins
-                unreadBbs = int(bbsTag["data-amount"])
-                self.updateBbs = not self.unreadBbs == unreadBbs
-                self.unreadBbs = unreadBbs
+                self.unreadBbs = int(bbsTag["data-amount"])
                 # NEEDS IMPROVEMENT
                 URLS[BBS] = (
                     re.search(".*\('(.*),", bbsTag["onclick"])
@@ -197,14 +195,14 @@ class viggo_api:
                         message(id, senderImg, senderName, date, subject, preview),
                     )
 
-    def _fetcgMsgContent(self):
-        for folder in self.msgBox.folders.values():
-            for msg in folder.messages.values():
-                soup = self._fetchHtml(
-                    self.baseUrl + URLS[MSG_DETAILS] + folder.id + "/" + msg.id + AJAX
-                )
-                if soup:
-                    msg.content = soup.find("div", class_="p").contents
+    # def _fetcgMsgContent(self):
+    #     for folder in self.msgBox.folders.values():
+    #         for msg in folder.messages.values():
+    #             soup = self._fetchHtml(
+    #                 self.baseUrl + URLS[MSG_DETAILS] + folder.id + "/" + msg.id + AJAX
+    #             )
+    #             if soup:
+    #                 msg.content = soup.find("div", class_="p").contents
 
     def _fetchBbs(self):
         soup = self._fetchHtml(self.baseUrl + URLS[BBS])
@@ -251,7 +249,11 @@ class viggo_api:
 
     def _dateFromStr(self, date: str):
         dateList = date.split(" ")
-        if "minutter" in date:
+        if "få" in date:
+            return datetime.now()
+        if "sekund" in date:
+            return datetime.now() - timedelta(seconds=int(dateList[0]))
+        elif "minut" in date:
             return datetime.now() - timedelta(minutes=int(dateList[0]))
         elif "time" in date:
             return datetime.now() - timedelta(hours=int(dateList[0]))
@@ -321,7 +323,6 @@ class message:
         self.date = date
         self.subject = subject
         self.preview = preview
-        self.content = ""
 
 
 class bulletinBoard:

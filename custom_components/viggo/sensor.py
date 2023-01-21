@@ -46,8 +46,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     viggo = hass.data[DOMAIN][CONF_CLIENT]
     sensors = [
         ViggoUserSensor(coordinator, viggo),
-        ViggoUnreadSensor(coordinator, viggo, viggo.unreadMsg, " Nye beskeder"),
-        ViggoUnreadSensor(coordinator, viggo, viggo.unreadBbs, " Nye opslag"),
+        ViggoUnreadSensor(coordinator, viggo, "msg", " Nye beskeder"),
+        ViggoUnreadSensor(coordinator, viggo, "bbs", " Nye opslag"),
     ]
     for folder in viggo.getMsgFolders():
         sensors.append(
@@ -117,10 +117,10 @@ class ViggoUserSensor(SensorEntity):
 
 
 class ViggoUnreadSensor(SensorEntity):
-    def __init__(self, coordinator, viggo, unread, namePostfix) -> None:
+    def __init__(self, coordinator, viggo, type, namePostfix) -> None:
         self.coordinator = coordinator
         self.viggo = viggo
-        self.unread = unread
+        self.type = type
         self.namePostfix = namePostfix
 
     @property
@@ -133,7 +133,10 @@ class ViggoUnreadSensor(SensorEntity):
 
     @property
     def state(self):
-        return self.unread
+        if self.type == "msg":
+            return self.viggo.unreadMsg
+        else:
+            return self.viggo.unreadBbs
 
     @property
     def unique_id(self):
@@ -206,9 +209,6 @@ class ViggoMsgFolderSensor(SensorEntity):
                     msg.update({"preview": msgObj.preview})
                 if self.detailLevel >= 4:
                     msg.update({"image": msgObj.senderImg})
-                # if self.detailLevel >= 5:
-                #     msg.pop("preview")
-                #     msg.update({"message": msgObj.content})
                 attr[ATTR_MESSAGES].append(msg)
                 i += 1
 
