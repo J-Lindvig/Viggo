@@ -13,3 +13,6 @@ viggo:
   username: john@my_domain.com       # Your username
   password: SECRET                   # Your password 
 ```
+
+## Known bugs
+- The messages in the dragt folder has a different format and breaks the integration... (1st priority)
