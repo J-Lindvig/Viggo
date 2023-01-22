@@ -78,13 +78,11 @@ class viggo_api:
     def _login(self, soup=None):
         # Have we been here before - did we bring soup...?
         if soup is None:
-            _LOGGER.debug("Login, first run...")
             soup = self._fetchHtml(self.baseUrl)
         if soup:
             self.loggedIn = (
                 soup.select_one("form[action='/Basic/Account/Login']") is None
             )
-            _LOGGER.debug(f"Logged in: {self.loggedIn}")
             if not self.loggedIn:
                 # Prepare a payload for login
                 payload = {

@@ -8,7 +8,15 @@ from datetime import timedelta
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import CONF_CLIENT, CONF_PLATFORM, DOMAIN, UPDATE_INTERVAL, CREDITS
+from .const import (
+    CONF_CLIENT,
+    CONF_CONFIG,
+    CONF_PLATFORM,
+    CONF_UPDATE_INTERVAL,
+    DOMAIN,
+    CREDITS,
+)
+
 
 from homeassistant.const import ATTR_ATTRIBUTION, ATTR_ENTITY_PICTURE
 
@@ -30,6 +38,11 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         # Call, and wait for it to finish, the function with the refresh procedure
         await hass.async_add_executor_job(viggo.update)
 
+    # Retrieve Viggo and config
+    viggo = hass.data[DOMAIN][CONF_CLIENT]
+    conf = hass.data[DOMAIN][CONF_CONFIG]
+    UPDATE_INTERVAL = conf[CONF_UPDATE_INTERVAL]
+
     # Create a coordinator
     coordinator = DataUpdateCoordinator(
         hass,
@@ -43,24 +56,33 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     await coordinator.async_request_refresh()
 
     # Add sensors to Home Assistant
-    viggo = hass.data[DOMAIN][CONF_CLIENT]
-    sensors = [
-        ViggoUserSensor(coordinator, viggo),
-        ViggoUnreadSensor(coordinator, viggo, "msg", " Nye beskeder"),
-        ViggoUnreadSensor(coordinator, viggo, "bbs", " Nye opslag"),
-    ]
-    for folder in viggo.getMsgFolders():
-        sensors.append(
-            ViggoMsgFolderSensor(
-                coordinator,
-                viggo,
-                folder,
-                5,
-                5,
+    sensors = []
+    if conf["userinfo"]:
+        sensors.append(ViggoUserSensor(coordinator, viggo))
+    if conf["unread"]:
+        sensors.append(ViggoUnreadSensor(coordinator, viggo, "msg", " Nye beskeder"))
+        sensors.append(ViggoUnreadSensor(coordinator, viggo, "bbs", " Nye opslag"))
+    if conf["amount"] > 0:
+        for folder in viggo.getMsgFolders():
+            sensors.append(
+                ViggoMsgFolderSensor(
+                    coordinator,
+                    viggo,
+                    folder,
+                    conf["amount"],
+                    conf["details"],
+                )
             )
-        )
-    for bbs in viggo.getBbs():
-        sensors.append(ViggoBbsSensor(coordinator, viggo, bbs, 2))
+        for bbs in viggo.getBbs():
+            sensors.append(
+                ViggoBbsSensor(
+                    coordinator,
+                    viggo,
+                    bbs,
+                    conf["amount"],
+                    conf["details"],
+                )
+            )
     async_add_entities(sensors)
 
 
@@ -168,12 +190,12 @@ class ViggoUnreadSensor(SensorEntity):
 
 
 class ViggoMsgFolderSensor(SensorEntity):
-    def __init__(self, coordinator, viggo, folder, showMsg=0, detailLevel=1) -> None:
+    def __init__(self, coordinator, viggo, folder, showMsg, details) -> None:
         self.coordinator = coordinator
         self.viggo = viggo
         self.folder = folder
         self.showMsg = showMsg
-        self.detailLevel = detailLevel
+        self.details = details
 
     @property
     def name(self):
@@ -201,13 +223,15 @@ class ViggoMsgFolderSensor(SensorEntity):
                 if i >= self.showMsg:
                     break
                 msg = {}
-                if self.detailLevel >= 1:
-                    msg.update({"from": msgObj.senderName, "subject": msgObj.subject})
-                if self.detailLevel >= 2:
+                if "sender_name" in self.details:
+                    msg.update({"from": msgObj.senderName})
+                if "date" in self.details:
                     msg.update({"date": msgObj.date})
-                if self.detailLevel >= 3:
+                if "subject" in self.details:
+                    msg.update({"subject": msgObj.subject})
+                if "preview" in self.details:
                     msg.update({"preview": msgObj.preview})
-                if self.detailLevel >= 4:
+                if "sender_image" in self.details:
                     msg.update({"image": msgObj.senderImg})
                 attr[ATTR_MESSAGES].append(msg)
                 i += 1
@@ -237,12 +261,12 @@ class ViggoMsgFolderSensor(SensorEntity):
 
 
 class ViggoBbsSensor(SensorEntity):
-    def __init__(self, coordinator, viggo, bbs, showMsg=0, detailLevel=1) -> None:
+    def __init__(self, coordinator, viggo, bbs, showMsg, details) -> None:
         self.coordinator = coordinator
         self.viggo = viggo
         self.bbs = bbs
         self.showMsg = showMsg
-        self.detailLevel = detailLevel
+        self.details = details
 
     @property
     def name(self):
@@ -270,13 +294,15 @@ class ViggoBbsSensor(SensorEntity):
                 if i >= self.showMsg:
                     break
                 bbs = {}
-                if self.detailLevel >= 1:
-                    bbs.update({"from": bbsObj.senderName, "subject": bbsObj.subject})
-                if self.detailLevel >= 2:
+                if "sender_name" in self.details:
+                    bbs.update({"from": bbsObj.senderName})
+                if "date" in self.details:
                     bbs.update({"date": bbsObj.date})
-                if self.detailLevel >= 3:
-                    bbs.update({"preview": bbsObj.content})
-                if self.detailLevel >= 4:
+                if "subject" in self.details:
+                    bbs.update({"subject": bbsObj.subject})
+                if "preview" in self.details:
+                    bbs.update({"content": bbsObj.content})
+                if "sender_image" in self.details:
                     bbs.update({"image": bbsObj.senderImg})
                 attr[ATTR_BULLETINS].append(bbs)
                 i += 1
