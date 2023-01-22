@@ -161,14 +161,16 @@ class viggo_api:
                 self._fetchFolders(url=urlTag.group(1))
             else:
                 # Find all foldernames and their urls
+                # Ignore drafts folder (id = -1)
                 for url in soup.find_all("a"):
-                    folderTag = re.search("(.*/)(-?[0-9]*)", url["href"])
-                    # If this is the first run extrac the URL for a folder
-                    if not MSG_FOLDER in URLS:
-                        URLS[MSG_FOLDER] = folderTag.group(1)
-                    self.msgBox.addFolder(
-                        mailFolder(url.text.strip(), folderTag.group(2))
-                    )
+                    folderTag = re.search("(.*/)([0-9]*)", url["href"])
+                    if folderTag.group(2):
+                        # If this is the first run extrac the URL for a folder
+                        if not MSG_FOLDER in URLS:
+                            URLS[MSG_FOLDER] = folderTag.group(1)
+                        self.msgBox.addFolder(
+                            mailFolder(url.text.strip(), folderTag.group(2))
+                        )
 
     def _fetchMsg(self):
         for folder in self.msgBox.folders.values():
