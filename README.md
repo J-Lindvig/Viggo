@@ -15,6 +15,8 @@ viggo:
   password: SECRET                   # Your password
 
   # OPTIONAL, with these the default values is used
+  update_interval: 15   # Bypass the standard of 60 minutes interval
+    
   show:
     userinfo: True      # Show the users info
     unread: True        # Make sensors with unread messages and bulletins
