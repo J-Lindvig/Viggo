@@ -28,6 +28,3 @@ viggo:
       - preview         # We can only show a preview, and not the entire message
       - sender_image    # The profile picture of the sender
 ```
-
-## Known bugs
-- The messages in the dragt folder has a different format and breaks the integration... (1st priority)
