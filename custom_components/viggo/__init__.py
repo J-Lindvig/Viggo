@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
 
 from .viggo_api import viggo_api
 from .const import (

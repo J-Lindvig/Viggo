@@ -1,29 +1,42 @@
 from __future__ import annotations
 
 import logging
+from .const import DOMAIN
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 _LOGGER = logging.getLogger(__name__)
 
+
+DOMAIN = "viggo"
+
 # RAW API CODE BELOW
 from bs4 import BeautifulSoup as BS
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, time
 import requests
 import os
 import re
+import gc
+
+DEBUG = False
 
 INPUT_FINGERPRINT = "fingerprint"
 INPUT_PASSWORD = "Password"
 INPUT_USERNAME = "UserName"
 INPUT_RETURN_URL = "returnUrl"
 
-AJAX = "?ajax=1"
+AJAX = "&ajax=1"
+PAGESIZE = "&pagesize=100000"
+VIEW = "&view=List"
+HOME = "&home=true"
+USER_ID = "&userId="
 BBS = "BBS"
 BBS_DETAILS = "BBS_DETAILS"
 LOGOUT = "LOGOUT"
 MSG_DETAILS = "MSG_DETAILS"
 MSG_FOLDER = "MSG_FOLDER"
 MSG_FOLDERS = "MSG_FOLDERS"
+RELATIONS = "RELATIONS"
+SCHEDULE = "SCHEDULE"
 
 MONTHS = [
     "jan",
@@ -44,7 +57,7 @@ URLS = {}
 
 class viggo_api:
     session = requests.Session()
-    soup, schoolName, logoUrl = None, None, None
+    schoolName, logoUrl = None, None
     loggedIn = False
     fingerPrint = None
     unreadMsg = -1
@@ -52,22 +65,37 @@ class viggo_api:
     userFullName = None
     userImg = None
     bbs = {}
+    # 	relations = []
+    relations = {}
 
     def __init__(self, url="", username="", password=""):
         self.baseUrl = url
         self.username = username
         self.password = password
         self.msgBox = mailbox()
+        if not DEBUG:
+            self.fingerPrintFile = (
+                "./config/custom_components/"
+                + DOMAIN
+                + "/fingerprints/"
+                + self.username
+            )
+        else:
+            self.fingerPrintFile = self.username
 
     def update(self):
         self._login()
 
+        self._fetchRelations()
+        self._fetchSchedule()
+
         self._fetchFolders()
         self._fetchMsg()
-        # This accidently "reads" the messages....
-        # self._fetcgMsgContent()
 
         self._fetchBbs()
+
+        collected = gc.collect()
+        print(f"Garbage collector: collected {collected} objects.")
 
     def getMsgFolders(self):
         return self.msgBox.folders.values()
@@ -93,13 +121,13 @@ class viggo_api:
                     )["value"],
                 }
 
-                # Is there a saved finngerprint from a previous session, then load
+                # Is there a saved fingerprint from a previous session, then load
                 # Else extract it from the login form and save it to file
-                if os.path.isfile(self.username):
-                    with open(self.username, "r") as f:
+                if os.path.isfile(self.fingerPrintFile):
+                    with open(self.fingerPrintFile, "r") as f:
                         payload[INPUT_FINGERPRINT] = f.read()
                 else:
-                    with open(self.username, "w") as f:
+                    with open(self.fingerPrintFile, "w") as f:
                         payload[INPUT_FINGERPRINT] = soup.select_one(
                             "input[name='fingerprint']"
                         )["value"]
@@ -143,13 +171,69 @@ class viggo_api:
                 self.userImg = imgTag["src"]
                 self.userFullName = imgTag.parent.span.text
 
+                # Extract the URL to the page with relations
+                URLS[RELATIONS] = soup.select_one(
+                    "section[data-confidential='relations']"
+                )["data-load-url"]
+
+            # Clean up
+            soup.decompose()
+
+    def _fetchRelations(self):
+        soup = self._fetchHtml(self.baseUrl + URLS[RELATIONS])
+
+        # Extract relations
+        for relations in soup.find("ul").find_all("li"):
+            id = relations["data-relation-id"]
+            self.relations[str(id)] = relation(
+                id, relations.a.text, relations.img["src"]
+            )
+
+            # There are a 2nd <li> ignore
+            break
+
+        # Extract URL for the schedule
+        url_payload = re.search(
+            "viggo.ajax.loadHtml\(`(.*)\?(.*)`", soup.find("script").text
+        )
+        URLS[SCHEDULE] = url_payload.group(1) + "?" + HOME + VIEW + AJAX + USER_ID
+
+    def _fetchSchedule(self):
+        # For every relation
+        for id in self.relations.keys():
+            # Fetch the schedule
+            soup = self._fetchHtml(self.baseUrl + URLS[SCHEDULE] + id)
+            if soup:
+                # Find every event
+                events = soup.find_all("li", class_="")
+                for eventTags in events:
+                    dates = []
+                    for dateList in eventTags.find(
+                        "div", class_="hint event"
+                    ).div.text.split(" - "):
+                        dateList = dateList.replace(".", "").strip(" ").split(" ")
+                        d = str(dateList[0]).zfill(2)
+                        m = str(MONTHS.index(dateList[1]) + 1).zfill(2)
+                        y = datetime.today().year if len(dateList) < 4 else dateList[2]
+                        t = dateList[-1]
+                        dates.append(
+                            datetime.strptime(f"{d}-{m}-{y} {t}", "%d-%m-%Y %H:%M")
+                        )
+                    self.relations[id].addEvent(
+                        event(
+                            dates,
+                            eventTags.strong.text,
+                            eventTags.find("small", class_="p").text.strip("( )"),
+                        )
+                    )
+
     def _fetchFolders(self, url=None):
         # If first run, fecth the "pretty" but useless page with folders
         firstRun = not url
         if firstRun:
             url = URLS[MSG_FOLDERS]
 
-        soup = self._fetchHtml(self.baseUrl + url + AJAX)
+        soup = self._fetchHtml(self.baseUrl + url + "?" + AJAX)
         if soup:
             # If this is still the first run, extract the correct link for page with the folders
             # Call the function again.
@@ -172,9 +256,14 @@ class viggo_api:
                             mailFolder(url.text.strip(), folderTag.group(2))
                         )
 
+            # Clean up
+            soup.decompose()
+
     def _fetchMsg(self):
         for folder in self.msgBox.folders.values():
-            soup = self._fetchHtml(self.baseUrl + URLS[MSG_FOLDER] + folder.id + AJAX)
+            soup = self._fetchHtml(
+                self.baseUrl + URLS[MSG_FOLDER] + folder.id + "?" + AJAX + PAGESIZE
+            )
             if soup:
                 msgList = soup.find_all("li", class_="contextmenu")
                 for msg in msgList:
@@ -194,15 +283,8 @@ class viggo_api:
                         folder.id,
                         message(id, senderImg, senderName, date, subject, preview),
                     )
-
-    # def _fetcgMsgContent(self):
-    #     for folder in self.msgBox.folders.values():
-    #         for msg in folder.messages.values():
-    #             soup = self._fetchHtml(
-    #                 self.baseUrl + URLS[MSG_DETAILS] + folder.id + "/" + msg.id + AJAX
-    #             )
-    #             if soup:
-    #                 msg.content = soup.find("div", class_="p").contents
+                # Clean up
+                soup.decompose()
 
     def _fetchBbs(self):
         soup = self._fetchHtml(self.baseUrl + URLS[BBS])
@@ -223,17 +305,12 @@ class viggo_api:
                     date = self._dateFromStr(soup.li.a.small.string)
                     contentTag = soup.li.find("div")
                     subject = contentTag.strong.string
-                    content = contentTag.find("div", class_="content").contents
                     self.bbs[bbsName].addBulletin(
-                        bulletin(
-                            idTag.group(2),
-                            senderImg,
-                            senderName,
-                            date,
-                            subject,
-                            content,
-                        )
+                        bulletin(idTag.group(2), senderImg, senderName, date, subject)
                     )
+
+            # Clean up
+            soup.decompose()
 
     def _fetchHtml(self, url=None, parser="html.parser", postData=None, timeout=5):
         if url is None:
@@ -247,22 +324,48 @@ class viggo_api:
             return BS(r.text, parser)
         return r.status_code
 
-    def _dateFromStr(self, date: str):
-        dateList = date.split(" ")
-        if "få" in date:
-            return datetime.now()
-        if "sekund" in date:
+    def _dateFromStr(self, dateStr: str):
+        dateList = dateStr.split(" ")
+        #        if "få" in dateStr:
+        #            return datetime.now()
+        if "sekund" in dateStr:
             return datetime.now() - timedelta(seconds=int(dateList[0]))
-        elif "minut" in date:
+        if "minut" in dateStr:
             return datetime.now() - timedelta(minutes=int(dateList[0]))
-        elif "time" in date:
+        if "time" in dateStr:
             return datetime.now() - timedelta(hours=int(dateList[0]))
-        else:
-            d = str(dateList[0][:-1]).zfill(2)
-            m = str(MONTHS.index(dateList[1]) + 1).zfill(2)
-            y = datetime.today().year if len(dateList) < 4 else dateList[2]
-            t = dateList[-1]
-            return datetime.strptime(f"{d}-{m}-{y} {t}", "%d-%m-%Y %H:%M")
+        if "går" in dateStr:
+            return datetime.strptime(
+                str(date.today()) + " " + dateList[-1], "%Y-%m-%d %H:%M"
+            ) - timedelta(days=1)
+        d = str(dateList[0][:-1]).zfill(2)
+        m = str(MONTHS.index(dateList[1]) + 1).zfill(2)
+        y = datetime.today().year if len(dateList) < 4 else dateList[2]
+        t = dateList[-1]
+        return datetime.strptime(f"{d}-{m}-{y} {t}", "%d-%m-%Y %H:%M")
+
+
+class relation:
+    id, name, image = None, None, None
+    schedule = []
+
+    def __init__(self, id, name, image):
+        self.id = id
+        self.name = name
+        self.image = image
+
+    def addEvent(self, event: object):
+        self.schedule.append(event)
+
+
+class event:
+    dateStart, dateEnd, title, location = None, None, None, None
+
+    def __init__(self, dates, title, location):
+        self.dateStart = dates[0]
+        self.dateEnd = dates[1]
+        self.title = title
+        self.location = location
 
 
 class mailbox:
@@ -306,6 +409,9 @@ class mailFolder:
     def getMessages(self):
         return self.messages.values()
 
+    def getFirstMessage(self):
+        return self.messages[list(self.messages.keys())[0]]
+
 
 class message:
     def __init__(
@@ -339,20 +445,16 @@ class bulletinBoard:
     def getBulletins(self):
         return self.bulletins.values()
 
+    def getFirstBulletin(self):
+        return self.bulletins[list(self.bulletins.keys())[0]]
+
 
 class bulletin:
     def __init__(
-        self,
-        id: str,
-        senderImg: str,
-        senderName: str,
-        date: datetime,
-        subject: str,
-        content: str,
+        self, id: str, senderImg: str, senderName: str, date: datetime, subject: str
     ) -> None:
         self.id = id
         self.senderImg = senderImg
         self.senderName = senderName
         self.date = date
         self.subject = subject
-        self.content = content

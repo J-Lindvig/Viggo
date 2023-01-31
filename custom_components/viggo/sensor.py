@@ -22,6 +22,7 @@ from homeassistant.const import ATTR_ATTRIBUTION, ATTR_ENTITY_PICTURE
 
 ATTR_BULLETINS = "bulletins"
 ATTR_MESSAGES = "messages"
+ATTR_SCHEDULE = "schedule"
 ATTR_SCHOOL_LOGO = "school_logo_url"
 ATTR_USER_IMAGE = "user_image"
 
@@ -62,6 +63,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     if conf["unread"]:
         sensors.append(ViggoUnreadSensor(coordinator, viggo, "msg", " Nye beskeder"))
         sensors.append(ViggoUnreadSensor(coordinator, viggo, "bbs", " Nye opslag"))
+    conf["amount"] = 1000 if conf["amount"] < 0 else conf["amount"]
     if conf["amount"] > 0:
         for folder in viggo.getMsgFolders():
             sensors.append(
@@ -83,6 +85,12 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                     conf["details"],
                 )
             )
+    for relation in viggo.relations.values():
+        sensors.append(
+            ViggoRelationSensor(
+                coordinator, relation, viggo.schoolName, viggo.fingerPrint
+            )
+        )
     async_add_entities(sensors)
 
 
@@ -138,6 +146,72 @@ class ViggoUserSensor(SensorEntity):
         )
 
 
+class ViggoRelationSensor(SensorEntity):
+    def __init__(self, coordinator, relation, schoolName, fingerPrint) -> None:
+        self.coordinator = coordinator
+        self.relation = relation
+        self.schoolName = schoolName
+        self.fingerPrint = fingerPrint
+
+    @property
+    def name(self):
+        return self.schoolName + " " + self.relation.name
+
+    @property
+    def icon(self):
+        return "mdi:account-school"
+
+    @property
+    def state(self):
+        if self.relation.schedule:
+            return self.relation.schedule[0].title
+        return ""
+
+    @property
+    def unique_id(self):
+        return self.relation.name + self.fingerPrint
+
+    @property
+    def extra_state_attributes(self):
+        # Calculate the sunrise and sunset from the coordinates of the HA server
+        attr = {
+            ATTR_ENTITY_PICTURE: self.relation.image,
+            ATTR_ATTRIBUTION: CREDITS,
+        }
+        attr[ATTR_SCHEDULE] = []
+        for event in self.relation.schedule:
+            attr[ATTR_SCHEDULE].append(
+                {
+                    "date_start": event.dateStart,
+                    "date_end": event.dateEnd,
+                    "title": event.title,
+                    "location": event.location,
+                }
+            )
+
+        return attr
+
+    @property
+    def should_poll(self):
+        """No need to poll. Coordinator notifies entity of updates."""
+        return False
+
+    @property
+    def available(self):
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
+
+    async def async_update(self):
+        """Update the entity. Only used by the generic entity update service."""
+        await self.coordinator.async_request_refresh()
+
+    async def async_added_to_hass(self):
+        """When entity is added to hass."""
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+
 class ViggoUnreadSensor(SensorEntity):
     def __init__(self, coordinator, viggo, type, namePostfix) -> None:
         self.coordinator = coordinator
@@ -151,7 +225,10 @@ class ViggoUnreadSensor(SensorEntity):
 
     @property
     def icon(self):
-        return "mdi:email-alert"
+        if self.type == "msg":
+            return "mdi:email-alert"
+        else:
+            return "mdi:bell"
 
     @property
     def state(self):
@@ -216,7 +293,20 @@ class ViggoMsgFolderSensor(SensorEntity):
     @property
     def extra_state_attributes(self):
         attr = {}
-        if self.showMsg > 0 and self.folder.size > 0:
+
+        msgObj = self.folder.getFirstMessage()
+        if "sender_name" in self.details:
+            attr["from"] = msgObj.senderName
+        if "date" in self.details:
+            attr["date"] = msgObj.date
+        if "subject" in self.details:
+            attr["subject"] = msgObj.subject
+        if "preview" in self.details:
+            attr["preview"] = msgObj.preview
+        if "sender_image" in self.details:
+            attr[ATTR_ENTITY_PICTURE] = msgObj.senderImg
+
+        if self.folder.size > 0:
             attr[ATTR_MESSAGES] = []
             i = 0
             for msgObj in self.folder.getMessages():
@@ -287,7 +377,20 @@ class ViggoBbsSensor(SensorEntity):
     @property
     def extra_state_attributes(self):
         attr = {}
-        if self.showMsg > 0 and self.bbs.size > 0:
+
+        bbsObj = self.bbs.getFirstBulletin()
+        if "sender_name" in self.details:
+            attr["from"] = bbsObj.senderName
+        if "date" in self.details:
+            attr["date"] = bbsObj.date
+        if "subject" in self.details:
+            attr["subject"] = bbsObj.subject
+        #        if "preview" in self.details:
+        #            attr["content"] = bbsObj.content
+        if "sender_image" in self.details:
+            attr[ATTR_ENTITY_PICTURE] = bbsObj.senderImg
+
+        if self.bbs.size > 0:
             attr[ATTR_BULLETINS] = []
             i = 0
             for bbsObj in self.bbs.getBulletins():
@@ -300,8 +403,8 @@ class ViggoBbsSensor(SensorEntity):
                     bbs.update({"date": bbsObj.date})
                 if "subject" in self.details:
                     bbs.update({"subject": bbsObj.subject})
-                if "preview" in self.details:
-                    bbs.update({"content": bbsObj.content})
+                # if "preview" in self.details:
+                #     bbs.update({"content": bbsObj.content})
                 if "sender_image" in self.details:
                     bbs.update({"image": bbsObj.senderImg})
                 attr[ATTR_BULLETINS].append(bbs)
