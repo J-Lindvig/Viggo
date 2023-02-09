@@ -5,7 +5,10 @@ Unofficial Home Assistant client for Viggo (https://viggo.dk/viggo/)
 This a very early version...
 
 ## Configuration
-It this version, it is all or nothing. In the final it will be possible to adjust settings.
+The required parameters is:
++ url
++ username
++ password
 
 ```yaml
 viggo:
@@ -17,7 +20,7 @@ viggo:
   # OPTIONAL, with these the default values is used
   update_interval: 15   # Bypass the standard of 60 minutes interval
     
-  show:
+  show:                 # These are the default values used if nothing is stated
     userinfo: True      # Show the users info
     unread: True        # Make sensors with unread messages and bulletins
     amount: 5           # Amount of messages or bulletins to show, 0 for excluding
@@ -27,4 +30,6 @@ viggo:
       - subject         # Subject
       - preview         # We can only show a preview, and not the entire message
       - sender_image    # The profile picture of the sender
+    relations: True     # Shall we show our relations (children)
+    schedule: True      # Shal we show the schedule for the current week
 ```
