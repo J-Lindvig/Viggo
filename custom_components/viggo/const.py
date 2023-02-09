@@ -5,6 +5,8 @@ CONF_DEFAULT = {
     "unread": True,
     "amount": 5,
     "details": ["sender_name", "date", "subject", "preview", "sender_image"],
+    "relations": True,
+    "schedule": True,
 }
 CONF_SHOW = "show"
 CONF_PASSWORD = "password"

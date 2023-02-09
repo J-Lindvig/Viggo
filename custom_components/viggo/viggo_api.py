@@ -6,9 +6,6 @@ from .const import DOMAIN
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 _LOGGER = logging.getLogger(__name__)
 
-
-DOMAIN = "viggo"
-
 # RAW API CODE BELOW
 from bs4 import BeautifulSoup as BS
 from datetime import date, datetime, timedelta, time
@@ -73,15 +70,7 @@ class viggo_api:
         self.username = username
         self.password = password
         self.msgBox = mailbox()
-        if not DEBUG:
-            self.fingerPrintFile = (
-                "./config/custom_components/"
-                + DOMAIN
-                + "/fingerprints/"
-                + self.username
-            )
-        else:
-            self.fingerPrintFile = self.username
+        self.fingerPrintFile = DOMAIN + "_" + self.username
 
     def update(self):
         self._login()
@@ -200,7 +189,7 @@ class viggo_api:
 
     def _fetchSchedule(self):
         # For every relation
-        for id in self.relations.keys():
+        for id, relation in self.relations.items():
             # Fetch the schedule
             soup = self._fetchHtml(self.baseUrl + URLS[SCHEDULE] + id)
             if soup:
@@ -219,7 +208,7 @@ class viggo_api:
                         dates.append(
                             datetime.strptime(f"{d}-{m}-{y} {t}", "%d-%m-%Y %H:%M")
                         )
-                    self.relations[id].addEvent(
+                    relation.addEvent(
                         event(
                             dates,
                             eventTags.strong.text,

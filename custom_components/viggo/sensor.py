@@ -85,12 +85,17 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                     conf["details"],
                 )
             )
-    for relation in viggo.relations.values():
-        sensors.append(
-            ViggoRelationSensor(
-                coordinator, relation, viggo.schoolName, viggo.fingerPrint
+    if conf["relations"]:
+        for relation in viggo.relations.values():
+            sensors.append(
+                ViggoRelationSensor(
+                    coordinator,
+                    relation,
+                    viggo.schoolName,
+                    viggo.fingerPrint,
+                    conf["schedule"],
+                )
             )
-        )
     async_add_entities(sensors)
 
 
@@ -147,11 +152,14 @@ class ViggoUserSensor(SensorEntity):
 
 
 class ViggoRelationSensor(SensorEntity):
-    def __init__(self, coordinator, relation, schoolName, fingerPrint) -> None:
+    def __init__(
+        self, coordinator, relation, schoolName, fingerPrint, showSchedule
+    ) -> None:
         self.coordinator = coordinator
         self.relation = relation
         self.schoolName = schoolName
         self.fingerPrint = fingerPrint
+        self.showSchedule = showSchedule
 
     @property
     def name(self):
@@ -178,16 +186,17 @@ class ViggoRelationSensor(SensorEntity):
             ATTR_ENTITY_PICTURE: self.relation.image,
             ATTR_ATTRIBUTION: CREDITS,
         }
-        attr[ATTR_SCHEDULE] = []
-        for event in self.relation.schedule:
-            attr[ATTR_SCHEDULE].append(
-                {
-                    "date_start": event.dateStart,
-                    "date_end": event.dateEnd,
-                    "title": event.title,
-                    "location": event.location,
-                }
-            )
+        if self.showSchedule:
+            attr[ATTR_SCHEDULE] = []
+            for event in self.relation.schedule:
+                attr[ATTR_SCHEDULE].append(
+                    {
+                        "date_start": event.dateStart,
+                        "date_end": event.dateEnd,
+                        "title": event.title,
+                        "location": event.location,
+                    }
+                )
 
         return attr
 
