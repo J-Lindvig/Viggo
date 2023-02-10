@@ -54,16 +54,16 @@ URLS = {}
 
 class viggo_api:
     session = requests.Session()
-    schoolName, logoUrl = None, None
+    fingerPrint, logoUrl, schoolName, userFullName, userImg = (
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
     loggedIn = False
-    fingerPrint = None
-    unreadMsg = -1
-    unreadBbs = -1
-    userFullName = None
-    userImg = None
-    bbs = {}
-    # 	relations = []
-    relations = {}
+    unreadMsg, unreadBbs = -1, -1
+    bbs, relations = {}, {}
 
     def __init__(self, url="", username="", password=""):
         self.baseUrl = url
@@ -83,8 +83,9 @@ class viggo_api:
 
         self._fetchBbs()
 
-        collected = gc.collect()
-        print(f"Garbage collector: collected {collected} objects.")
+        gc.collect()
+
+        return True
 
     def getMsgFolders(self):
         return self.msgBox.folders.values()
@@ -97,6 +98,7 @@ class viggo_api:
         if soup is None:
             soup = self._fetchHtml(self.baseUrl)
         if soup:
+            # Are we still at the loginpage? Then we are NOT logged in
             self.loggedIn = (
                 soup.select_one("form[action='/Basic/Account/Login']") is None
             )
@@ -110,7 +112,7 @@ class viggo_api:
                     )["value"],
                 }
 
-                # Is there a saved fingerprint from a previous session, then load
+                # Is there a saved fingerprint from a previous session, then load it from file
                 # Else extract it from the login form and save it to file
                 if os.path.isfile(self.fingerPrintFile):
                     with open(self.fingerPrintFile, "r") as f:
@@ -128,13 +130,16 @@ class viggo_api:
                     url=self.baseUrl + soup.find("form")["action"], postData=payload
                 )
                 if soup:
-                    # First login since last session
+                    # If the URL for the logout page is NOT in our list of URLS
+                    # Then this is our first login...
                     if not LOGOUT in URLS:
                         URLS[LOGOUT] = soup.select_one("li[class='logout']").a["href"]
                         # Name and Logo of school
                         infoTag = soup.select_one("div[id='client-name']")
                         self.schoolName = infoTag.div.text
                         self.logoUrl = infoTag.img["src"]
+
+                    # Left the it again with the current page (soup)
                     self._login(soup)
             else:
                 # We are logged in - lets get to work....
@@ -217,7 +222,9 @@ class viggo_api:
                     )
 
     def _fetchFolders(self, url=None):
-        # If first run, fecth the "pretty" but useless page with folders
+        # If no URL is specified, then this is our first run
+        # Store is in [firstRun] since we are using it later
+        # We are altering the URL and can't use this as a reference point
         firstRun = not url
         if firstRun:
             url = URLS[MSG_FOLDERS]
@@ -238,7 +245,8 @@ class viggo_api:
                 for url in soup.find_all("a"):
                     folderTag = re.search("(.*/)([0-9]*)", url["href"])
                     if folderTag.group(2):
-                        # If this is the first run extrac the URL for a folder
+                        # If this is the first scrapign of links to folders?
+                        # Extract the base URL for a folder
                         if not MSG_FOLDER in URLS:
                             URLS[MSG_FOLDER] = folderTag.group(1)
                         self.msgBox.addFolder(
@@ -272,6 +280,7 @@ class viggo_api:
                         folder.id,
                         message(id, senderImg, senderName, date, subject, preview),
                     )
+
                 # Clean up
                 soup.decompose()
 
@@ -315,8 +324,6 @@ class viggo_api:
 
     def _dateFromStr(self, dateStr: str):
         dateList = dateStr.split(" ")
-        #        if "få" in dateStr:
-        #            return datetime.now()
         if "sekund" in dateStr:
             return datetime.now() - timedelta(seconds=int(dateList[0]))
         if "minut" in dateStr:
@@ -359,7 +366,7 @@ class event:
 
 class mailbox:
     folders = {}
-    inbox, sent, draft = None, None, None
+    inbox, sent = None, None
 
     def __init__(self):
         pass
@@ -370,21 +377,18 @@ class mailbox:
         if "indbakke" in folderName:
             self.inbox = self.folders[folderObj.id]
             return
-        if "kladder" in folderName:
-            self.draft = self.folders[folderObj.id]
-            return
         if "sendt" in folderName:
             self.sent = self.folders[folderObj.id]
             return
 
     def addMsgToFolder(self, folderId: str, msg: object):
-        if self.folders and folderId in self.folders.keys():
+        # if self.folders and folderId in self.folders.keys():
+        if folderId in self.folders:
             self.folders[folderId].addMsg(msg)
 
 
 class mailFolder:
-    id = 0
-    size = 0
+    id, size = 0, 0
 
     def __init__(self, folderName: str, id):
         self.id = str(id)
