@@ -196,17 +196,14 @@ class viggo_api:
         # For every relation
         for id, relation in self.relations.items():
             # Fetch the schedule
+            _LOGGER.debug(f"URL: ({self.baseUrl + URLS[SCHEDULE] + id})")
             soup = self._fetchHtml(self.baseUrl + URLS[SCHEDULE] + id)
             if soup:
                 # Find every event
-                #                events = soup.find_all("li", class_="")
+                # events = soup.find_all("li", class_="")
                 events = soup.find_all("li")
                 for eventTags in events:
-                    _LOGGER.debug(f"class: ({eventTags.attrs})")
-                    if (
-                        "class" in eventTags.attrs
-                        and str(eventTags["class"]).strip() == ""
-                    ):
+                    if "class" in eventTags.attrs and len(eventTags["class"]) == 0:
                         dates = []
                         for dateList in eventTags.find(
                             "div", class_="hint event"
