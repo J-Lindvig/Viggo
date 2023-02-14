@@ -199,27 +199,37 @@ class viggo_api:
             soup = self._fetchHtml(self.baseUrl + URLS[SCHEDULE] + id)
             if soup:
                 # Find every event
-                events = soup.find_all("li", class_="")
+                #                events = soup.find_all("li", class_="")
+                events = soup.find_all("li")
                 for eventTags in events:
-                    dates = []
-                    for dateList in eventTags.find(
-                        "div", class_="hint event"
-                    ).div.text.split(" - "):
-                        dateList = dateList.replace(".", "").strip(" ").split(" ")
-                        d = str(dateList[0]).zfill(2)
-                        m = str(MONTHS.index(dateList[1]) + 1).zfill(2)
-                        y = datetime.today().year if len(dateList) < 4 else dateList[2]
-                        t = dateList[-1]
-                        dates.append(
-                            datetime.strptime(f"{d}-{m}-{y} {t}", "%d-%m-%Y %H:%M")
+                    _LOGGER.debug(f"class: ({eventTags.attrs})")
+                    if (
+                        "class" in eventTags.attrs
+                        and str(eventTags["class"]).strip() == ""
+                    ):
+                        dates = []
+                        for dateList in eventTags.find(
+                            "div", class_="hint event"
+                        ).div.text.split(" - "):
+                            dateList = dateList.replace(".", "").strip(" ").split(" ")
+                            d = str(dateList[0]).zfill(2)
+                            m = str(MONTHS.index(dateList[1]) + 1).zfill(2)
+                            y = (
+                                datetime.today().year
+                                if len(dateList) < 4
+                                else dateList[2]
+                            )
+                            t = dateList[-1]
+                            dates.append(
+                                datetime.strptime(f"{d}-{m}-{y} {t}", "%d-%m-%Y %H:%M")
+                            )
+                        relation.addEvent(
+                            event(
+                                dates,
+                                eventTags.strong.text,
+                                eventTags.find("small", class_="p").text.strip("( )"),
+                            )
                         )
-                    relation.addEvent(
-                        event(
-                            dates,
-                            eventTags.strong.text,
-                            eventTags.find("small", class_="p").text.strip("( )"),
-                        )
-                    )
 
     def _fetchFolders(self, url=None):
         # If no URL is specified, then this is our first run
@@ -403,7 +413,7 @@ class mailFolder:
         return self.messages.values()
 
     def getFirstMessage(self):
-        if size > 0:
+        if self.size > 0:
             return self.messages[list(self.messages.keys())[0]]
         return False
 
@@ -441,7 +451,7 @@ class bulletinBoard:
         return self.bulletins.values()
 
     def getFirstBulletin(self):
-        if size > 0:
+        if self.size > 0:
             return self.bulletins[list(self.bulletins.keys())[0]]
         return False
 
