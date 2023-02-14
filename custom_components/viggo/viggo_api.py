@@ -441,7 +441,9 @@ class bulletinBoard:
         return self.bulletins.values()
 
     def getFirstBulletin(self):
-        return self.bulletins[list(self.bulletins.keys())[0]]
+        if size > 0:
+            return self.bulletins[list(self.bulletins.keys())[0]]
+        return False
 
 
 class bulletin:

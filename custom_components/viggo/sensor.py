@@ -387,19 +387,19 @@ class ViggoBbsSensor(SensorEntity):
     def extra_state_attributes(self):
         attr = {}
 
-        bbsObj = self.bbs.getFirstBulletin()
-        if "sender_name" in self.details:
-            attr["from"] = bbsObj.senderName
-        if "date" in self.details:
-            attr["date"] = bbsObj.date
-        if "subject" in self.details:
-            attr["subject"] = bbsObj.subject
-        #        if "preview" in self.details:
-        #            attr["content"] = bbsObj.content
-        if "sender_image" in self.details:
-            attr[ATTR_ENTITY_PICTURE] = bbsObj.senderImg
-
         if self.bbs.size > 0:
+            bbsObj = self.bbs.getFirstBulletin()
+            if "sender_name" in self.details:
+                attr["from"] = bbsObj.senderName
+            if "date" in self.details:
+                attr["date"] = bbsObj.date
+            if "subject" in self.details:
+                attr["subject"] = bbsObj.subject
+            #        if "preview" in self.details:
+            #            attr["content"] = bbsObj.content
+            if "sender_image" in self.details:
+                attr[ATTR_ENTITY_PICTURE] = bbsObj.senderImg
+
             attr[ATTR_BULLETINS] = []
             i = 0
             for bbsObj in self.bbs.getBulletins():
