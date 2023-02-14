@@ -303,19 +303,19 @@ class ViggoMsgFolderSensor(SensorEntity):
     def extra_state_attributes(self):
         attr = {}
 
-        msgObj = self.folder.getFirstMessage()
-        if "sender_name" in self.details:
-            attr["from"] = msgObj.senderName
-        if "date" in self.details:
-            attr["date"] = msgObj.date
-        if "subject" in self.details:
-            attr["subject"] = msgObj.subject
-        if "preview" in self.details:
-            attr["preview"] = msgObj.preview
-        if "sender_image" in self.details:
-            attr[ATTR_ENTITY_PICTURE] = msgObj.senderImg
-
         if self.folder.size > 0:
+            msgObj = self.folder.getFirstMessage()
+            if "sender_name" in self.details:
+                attr["from"] = msgObj.senderName
+            if "date" in self.details:
+                attr["date"] = msgObj.date
+            if "subject" in self.details:
+                attr["subject"] = msgObj.subject
+            if "preview" in self.details:
+                attr["preview"] = msgObj.preview
+            if "sender_image" in self.details:
+                attr[ATTR_ENTITY_PICTURE] = msgObj.senderImg
+
             attr[ATTR_MESSAGES] = []
             i = 0
             for msgObj in self.folder.getMessages():

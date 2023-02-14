@@ -403,7 +403,9 @@ class mailFolder:
         return self.messages.values()
 
     def getFirstMessage(self):
-        return self.messages[list(self.messages.keys())[0]]
+        if size > 0:
+            return self.messages[list(self.messages.keys())[0]]
+        return False
 
 
 class message:
